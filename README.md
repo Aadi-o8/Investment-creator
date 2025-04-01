@@ -36,5 +36,5 @@ Each fund’s governance token is unique, preventing interference from external 
 ### Installation
 1. Clone the repository:
    ```bash
-   git clone https://github.com/your-username/solana-investment-syndicate.git
-   cd solana-investment-syndicate
+   git clone https://github.com/Aadi-o8/Investment-creator.git
+   cd Investment-creator
