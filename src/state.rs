@@ -6,7 +6,16 @@ pub struct FundAccount {
     pub members: Vec<Pubkey>,
     pub total_deposit: u64,
     pub governance_mint: Pubkey,
+    pub vault: Pubkey,
     pub is_initialized: bool,
+}
+
+#[derive(BorshDeserialize, BorshSerialize)]
+pub struct UserspecificAccount {
+    pub user:Pubkey,
+    pub deposit:u64,
+    pub is_active:bool,
+    pub governance_token_balance:u64,
 }
 
 #[derive(BorshSerialize, BorshDeserialize)]

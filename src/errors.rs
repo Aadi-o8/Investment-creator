@@ -3,6 +3,10 @@ use solana_program::program_error::ProgramError;
 #[derive(Debug)]
 pub enum FundError {
     InstructionUnpackError,
+    MissingRequiredSignature,
+    InvalidAccountData,
+    InvalidGovernanceMint,
+    InvalidTokenAccount,
     InvalidInstruction,
     NotEnoughFunds,
 }
