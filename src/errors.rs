@@ -6,6 +6,8 @@ pub enum FundError {
     MissingRequiredSignature,
     InvalidAccountData,
     InvalidGovernanceMint,
+    AlreadyVoted,
+    VotingCeased,
     InvalidTokenAccount,
     InvalidInstruction,
     NotEnoughFunds,

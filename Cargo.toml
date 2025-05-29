@@ -13,3 +13,4 @@ borsh-derive = "0.10"
 spl-token = { version = "4.0", features = ["no-entrypoint"]}
 thiserror = "1.0"
 spl-associated-token-account = { version = "2.0", features = ["no-entrypoint"]}
+mpl-token-metadata = "3.1.0"

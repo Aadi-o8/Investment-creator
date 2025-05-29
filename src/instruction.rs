@@ -1,5 +1,6 @@
 use solana_program::{
-    msg, program_error::ProgramError, pubkey::{Pubkey, PUBKEY_BYTES}
+    program_error::ProgramError,
+    pubkey::{Pubkey, PUBKEY_BYTES},
 };
 use crate::errors::FundError;
 use borsh::{BorshSerialize, BorshDeserialize};
@@ -17,8 +18,14 @@ pub enum FundInstruction {
     // 6. Rent Account
     // 7. [..] Array of Fund Members
     InitFundAccount { 
-        number_of_members: u8,
-        user_seed: Vec<u8>,
+        privacy: u8,
+        fund_name: String,
+    },
+
+    InitUserAccount { },
+
+    AddFundMember {
+        fund_name: String,
     },
 
     // 1. Governance Mint Account
@@ -28,94 +35,136 @@ pub enum FundInstruction {
     // 5. Token Program
     // 6. Member's Governance Token Account
     // 7. Member's Wallet
-    // 8. User specific pda account
+    // 8. User-specific PDA
     InitDepositSol {
         amount: u64,
-        user_seed: Vec<u8>,
+        fund_name: String,
     },
 
+    InitDepositToken {
+        amount: u64,
+        fund_name: String,
+    },
 
-    // 1. Investment proposal (tag -> 0)
-    // 2. Addition of new member (tag -> 1)
-    // 3. Withdrawal proposal (tag -> 2)
-    // 4. Removal of any member (tag -> 3)
-    InitProposalAccount { 
-        // assets: Vec<Pubkey>, 
-        amounts: Vec<u64>, 
-        dex: Vec<u8>, 
+    // Proposals can be of the following types:
+    // 1. Investment -> tag 0
+    // 2. Addition of New Member -> tag 1
+    // 3. Removal of any member -> tag 2
+    // 4. Withdrawl -> tag 3
+
+    // 1. Proposer Account
+    // 2. [..] From Assets Mints
+    // 3. [..] To Assets Mints
+    InitProposalInvestment {
+        amounts: Vec<u64>,
+        // dex_tags: Vec<u8>,
         deadline: i64,
-        user_seed: Vec<u8>,
+        fund_name: String,
     },
-
 
     // 1. Voter Account
     // 2. Vote Account
-    // 3. System Program
-    // 4. Fund Account
-    // 5. Proposal Account
-    // 6. User specified pda
-    // 7. Governance token mint
-    // 8. Voter's governance token account
-    InitVotingAccount { 
-        user_seed: Vec<u8>,
+    // 3. Proposal Account
+    // 4. System Program
+    // 5. User PDA Account
+    // 6. Fund Account
+    // 7. Governance Mint Account
+    // 8. Voter Governance Token Account
+    Vote {
         vote: u8,
-
+        fund_name: Vec<u8>,
     },
 
+    DeleteFund {},
+
+    InitRentAccount { },
+
+    // 1. Proposal Account
+    // 2. Fund Account
+    // 3. Vault Account
+    // 4. System Program
+    // 5. Token Program
+    ExecuteProposalInvestment {},
     Execute { proposal: Pubkey },
+    LeaveFund{fund_name: String },
 }
 
 impl FundInstruction {
     pub fn unpack(input: &[u8]) -> Result<Self, ProgramError> {
-        let (&tag, rest) = input
+        let (tag, rest) = input
             .split_first()
             .ok_or(FundError::InstructionUnpackError)?;
 
         Ok(match tag {
             0 => {
-                let (num, rest) = Self::unpack_members(rest)?;
-                let (user_seed, _rest) = Self::unpack_seed(rest)?;
-
+                let (privacy, rest) = Self::unpack_members(rest)?;
+                // let (fund_name, _rest) = Self::unpack_seed(rest)?;
+                let fund_name = std::str::from_utf8(rest).map_err(|_| ProgramError::InvalidInstructionData)?.to_string();
                 Self::InitFundAccount {
-                    number_of_members: num,
-                    user_seed,
+                    privacy,
+                    fund_name,
                 }
             }
             1 => {
                 let (amount, rest) = Self::unpack_amount(rest)?;
-                let (user_seed, _rest) = Self::unpack_seed(rest)?;
-
+                let fund_name = std::str::from_utf8(rest).map_err(|_| ProgramError::InvalidInstructionData)?.to_string();
                 Self::InitDepositSol {
                     amount,
-                    user_seed
+                    fund_name,
                 }
-            }
-
+            } 
             2 => {
-                let (&number_of_assets,rest) = rest.split_first().ok_or(FundError::InstructionUnpackError)?;
-                let(amounts,rest) = Self::unpack_amounts(rest,number_of_assets)?;
-                let(dex,rest) = Self::unpack_dex(rest, number_of_assets)?;
-                let(deadline,rest) = Self::unpack_deadline(rest)?;
-                let (user_seed, _rest) = Self::unpack_seed(rest)?;
-                Self::InitProposalAccount {
+                let (&num_of_swaps, rest) = rest.split_first().ok_or(FundError::InstructionUnpackError)?;
+                let (amounts, rest) = Self::unpack_amounts(rest, num_of_swaps)?;
+                // let (dex_tags, rest) = Self::unpack_dex_tags(rest, num_of_swaps)?;
+                let (deadline, rest) = Self::unpack_deadline(rest)?;
+                let fund_name = std::str::from_utf8(rest).map_err(|_| ProgramError::InvalidInstructionData)?.to_string();
+
+                Self::InitProposalInvestment {
                     amounts,
-                    dex,
+                    // dex_tags,
                     deadline,
-                    user_seed,
+                    fund_name,
                 }
             }
-
             3 => {
-                let(vote,rest) = Self::unpack_vote(input)?;
-                let (user_seed, _rest) = Self::unpack_seed(rest)?;
-                Self::InitVotingAccount{
+                let (&vote, rest) = rest.split_first().ok_or(FundError::InstructionUnpackError)?;
+                let (fund_name, _rest) = Self::unpack_seed(rest)?;
+                Self::Vote {
                     vote,
-                    user_seed,
+                    fund_name,
                 }
             }
+            4 => {
+                let fund_name = std::str::from_utf8(rest).map_err(|_| ProgramError::InvalidInstructionData)?.to_string();
+                Self::AddFundMember { fund_name }
+            }
+            5 => {
+                Self::ExecuteProposalInvestment {}
+            }
+            6 => {
+                Self::InitRentAccount {  }
+            }
+            7 => {
+                Self::InitUserAccount {  }
+            }
+            8 => {
+                let (amount, rest) = Self::unpack_amount(rest)?;
+                let fund_name = std::str::from_utf8(rest).map_err(|_| ProgramError::InvalidInstructionData)?.to_string();
+                Self::InitDepositToken {
+                    amount,
+                    fund_name,
+                }
+            }
+            9 => {
+                Self::DeleteFund { }
+            }
+            10 => {
+                let fund_name = std::str::from_utf8(rest).map_err(|_| ProgramError::InvalidInstructionData)?.to_string();
 
+                Self::LeaveFund { fund_name }
+            }
             _ => {
-                msg!("Instruction cannot be unpacked");
                 return Err(FundError::InstructionUnpackError.into());
             }
         })
@@ -130,9 +179,24 @@ impl FundInstruction {
         Ok((num, rest))
     }
 
-    pub fn unpack_amount(input: &[u8]) -> Result<(u64, &[u8]), ProgramError> {
+    fn unpack_seed(input: &[u8]) -> Result<(Vec<u8>, &[u8]), ProgramError> {
+        if input.len() < PUBKEY_BYTES {
+            return Err(FundError::InstructionUnpackError.into());
+        }
+
+        let mut seed: Vec<u8> = Vec::new();
+        let mut input_slice = input;
+        for _i in 0..PUBKEY_BYTES {
+            let (byte, rest) = input_slice.split_first().ok_or(FundError::InstructionUnpackError)?;
+            seed.push(*byte);
+            input_slice = rest;
+        }
+
+        Ok((seed, input_slice))
+    }
+
+    fn unpack_amount(input: &[u8]) -> Result<(u64, &[u8]), ProgramError> {
         if input.len() < BYTE_SIZE_8 {
-            msg!("Amount cannot be unpacked");
             return Err(FundError::InstructionUnpackError.into());
         }
         let (amount_bytes, rest) = input.split_at(BYTE_SIZE_8);
@@ -142,91 +206,45 @@ impl FundInstruction {
         Ok((amount, rest))
     }
 
-    pub fn unpack_seed(input: &[u8]) -> Result<(Vec<u8>,&[u8]),ProgramError> {
-
-        if input.iter().len() < PUBKEY_BYTES {
-            msg!("Invalid seed provided");
+    fn unpack_amounts(input: &[u8], num_of_swaps: u8) -> Result<(Vec<u64>, &[u8]), ProgramError> {
+        if input.len() < BYTE_SIZE_8*(num_of_swaps as usize) {
             return Err(FundError::InstructionUnpackError.into());
         }
 
+        let mut amounts: Vec<u64> = Vec::new();
         let mut input_slice = input;
-        let mut seed_material:Vec<u8> = Vec::new();
-
-        for _i in 0..PUBKEY_BYTES{
-            
-            let (seed, rest) = input_slice.split_first().ok_or(FundError::InstructionUnpackError)?;
-            seed_material.push(*seed);
-            input_slice = rest;
-        }
-
-        Ok((seed_material,input_slice))
-    }
-
-    pub fn unpack_amounts(input: &[u8], number_of_assets:u8) -> Result<(Vec<u64>, &[u8]), ProgramError> {
-        if input.len() < BYTE_SIZE_8*(number_of_assets as usize) {
-            msg!("Amount cannot be unpacked");
-            return Err(FundError::InstructionUnpackError.into());
-        }
-        
-        let mut amounts = Vec::new();
-        let mut input_slice=input;
-
-        for _i in 0..number_of_assets {
-            let (amount,rest) = Self::unpack_amount(input_slice)?;
+        for _i in 0..num_of_swaps {
+            let (amount, rest) = Self::unpack_amount(input_slice)?;
             amounts.push(amount);
             input_slice = rest;
         }
-        // let (amount_bytes, rest) = input.split_at(BYTE_SIZE_8);
-        // let amount = u64::from_le_bytes(amount_bytes.try_into().expect("Invalid amount length"));
 
         Ok((amounts, input_slice))
     }
 
-    fn unpack_dex(input: &[u8], number_of_assets:u8) -> Result<(Vec<u8>, &[u8]),ProgramError> {
-
-        if input.len() < number_of_assets as usize {
-            msg!("Invalid Dex key provided");
+    fn unpack_dex_tags(input: &[u8], num_of_swaps: u8) -> Result<(Vec<u8>, &[u8]), ProgramError> {
+        if input.len() < num_of_swaps as usize {
             return Err(FundError::InstructionUnpackError.into());
         }
 
-        let mut dex=Vec::new();
-        let mut input_slice=input;
-        for _i in 0..number_of_assets {
-            let(dex_bytes, rest)= input_slice.split_first().ok_or(FundError::InstructionUnpackError)?;
-            dex.push(*dex_bytes);
-            input_slice=rest;
+        let mut dex_tags: Vec<u8> = Vec::new();
+        let mut input_slice = input;
+        for _i in 0..num_of_swaps {
+            let (dex_tag, rest) = input_slice.split_first().ok_or(FundError::InstructionUnpackError)?;
+            dex_tags.push(*dex_tag);
+            input_slice = rest;
         }
 
-        // let (dex_bytes,rest) = input.split_at(PUBKEY_BYTES);
-        // let dex = Pubkey::try_from_slice(dex_bytes).map_err(|_| ProgramError::InvalidAccountData)?;
-
-        Ok((dex,input_slice))
+        Ok((dex_tags, input_slice))
     }
 
-    fn unpack_deadline (input: &[u8]) -> Result<(i64, &[u8]), ProgramError> {
-
+    fn unpack_deadline(input: &[u8]) -> Result<(i64, &[u8]), ProgramError> {
         if input.len() < BYTE_SIZE_8 {
-            msg!("Invalid deadline provided");
             return Err(FundError::InstructionUnpackError.into());
         }
 
-        let(deadline_bytes, rest) = input.split_at(BYTE_SIZE_8);
-
-        let deadline=i64::from_le_bytes(deadline_bytes.try_into().expect("Invalid deadline provided"));
-
-        Ok((deadline,rest))
+        let (deadline_data, rest) = input.split_at(BYTE_SIZE_8);
+        let deadline = i64::from_le_bytes(deadline_data.try_into().expect("Failed to get Deadline"));
+        Ok((deadline, rest))
     }
-
-    fn unpack_vote (input: &[u8]) ->Result<(u8,&[u8]), ProgramError> {
-
-        if input.len() < BYTE_SIZE_8 {
-            msg!("Invalid Voting");
-            return Err(FundError::InstructionUnpackError.into());
-        }
-
-        let (vote,rest) = input.split_first().ok_or(FundError::InstructionUnpackError)?;
-
-        Ok((*vote,rest))
-    }
-
 }
